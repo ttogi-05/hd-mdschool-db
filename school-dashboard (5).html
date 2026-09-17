@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>교무 행정 대시보드</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Nanum+Gothic:wght@400;700&family=Nanum+Myeongjo:wght@400;700&family=Gowun+Batang:wght@400;700&family=Black+Han+Sans&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --paper: #EDEEE6;
+    --card: #FBFAF6;
+    --ink: #2A2B26;
+    --ink-soft: #5C5D54;
+    --hairline: #D8D6C9;
+    --hairline-strong: #C3C1B2;
+    --red: #B4442E;
+    --navy: #1C2B4A;
+    --green: #3F6B52;
+    --ochre: #8A6D3B;
+    --grey: #6B6156;
+    --accent: #1C2B4A;
+    --app-font: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    --font-scale: 1;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--app-font);
+    min-height: 100vh;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    padding: 36px 40px 22px;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  .topbar h1{
+    margin:0;
+    font-size: calc(26px * var(--font-scale));
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .topbar p{
+    margin: 6px 0 0;
+    color: var(--ink-soft);
+    font-size: calc(14px * var(--font-scale));
+  }
+  .topbar-actions{
+    display:flex;
+    gap: 16px;
+    align-items:center;
+    flex-wrap: wrap;
+  }
+  .reset-link{
+    background:none;
+    border:none;
+    color: var(--ink-soft);
+    font-size: calc(13px * var(--font-scale));
+    cursor:pointer;
+    padding: 6px 2px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .reset-link:hover{ color: var(--red); }
+  .sync-hint{
+    padding: 0 40px;
+    font-size: calc(12px * var(--font-scale));
+    color: var(--ink-soft);
+    max-width: 1280px;
+    margin: 10px auto 0;
+  }
+  .reset-link.active{ color: var(--accent); text-decoration:none; font-weight:700; }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+    padding: 28px 40px 60px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  .card{
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--hairline);
+    border-left: 4px solid var(--grey);
+    padding: 18px 18px 16px;
+    min-height: 118px;
+    cursor:pointer;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    opacity:0;
+    transform: translateY(6px);
+    animation: cardIn 0.35s ease forwards;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover{
+    border-color: var(--hairline-strong);
+    transform: translateY(-2px);
+  }
+  .card:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @keyframes cardIn{
+    to{ opacity:1; transform: translateY(0); }
+  }
+
+  .card .tag{
+    font-size: calc(12px * var(--font-scale));
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .card h3{
+    margin:0 0 8px;
+    font-size: calc(16px * var(--font-scale));
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .card .preview{
+    font-size: calc(12.5px * var(--font-scale));
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .card .manager{
+    font-size: calc(14px * var(--font-scale));
+    font-weight: 700;
+    color: var(--ink);
+    margin: 2px 0 8px;
+  }
+  .card.reorder-mode{ cursor: grab; }
+  .card.reorder-mode:active{ cursor: grabbing; }
+  .card.dragging{ opacity: 0.4; }
+  .card.drag-over{ border-color: var(--accent); border-style: dashed; }
+  .drag-handle{
+    position:absolute; top:10px; left:10px;
+    color: var(--ink-soft);
+    font-size: calc(13px * var(--font-scale));
+    letter-spacing: 1px;
+    pointer-events: none;
+  }
+
+  .card.empty{
+    background: transparent;
+    border: 1px dashed var(--hairline-strong);
+    border-left: 1px dashed var(--hairline-strong);
+    align-items:center;
+    justify-content:center;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .card.empty:hover{ border-color: var(--ink-soft); color: var(--ink); }
+
+  .card .edit-pin{
+    position:absolute; top:10px; right:10px;
+    background:none; border:none; color: var(--ink-soft);
+    font-size:13px; cursor:pointer; padding:3px 5px;
+  }
+  .card .edit-pin:hover{ color: var(--accent); }
+
+  /* Drawer */
+  .backdrop{
+    position:fixed; inset:0;
+    background: rgba(30,29,24,0.35);
+    opacity:0; pointer-events:none;
+    transition: opacity 0.2s ease;
+    z-index: 40;
+  }
+  .backdrop.open{ opacity:1; pointer-events:auto; }
+
+  .drawer{
+    position:fixed;
+    top:0; right:0;
+    height:100%;
+    width: 460px;
+    max-width: 92vw;
+    background: var(--card);
+    border-left: 1px solid var(--hairline-strong);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 50;
+    display:flex;
+    flex-direction:column;
+  }
+  .drawer.open{ transform: translateX(0); }
+
+  .drawer-head{
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid var(--hairline);
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 12px;
+  }
+  .drawer-head .cat-bar{
+    width: 4px;
+    align-self:stretch;
+  }
+  .drawer-title-wrap{ flex:1; }
+  .drawer-title-wrap .tag{ font-size:12px; color:var(--ink-soft); margin-bottom:6px; }
+  .drawer-title-wrap h2{
+    margin:0;
+    font-size: 19px;
+    font-weight:700;
+    line-height:1.35;
+  }
+  .drawer-title-wrap input[type="text"].title-input{
+    font-size: 18px;
+    font-weight:700;
+    width:100%;
+    border: none;
+    border-bottom: 1px solid var(--hairline-strong);
+    background: transparent;
+    padding: 2px 0 6px;
+    font-family: inherit;
+    color: var(--ink);
+  }
+  .close-btn{
+    background:none; border:none; cursor:pointer;
+    font-size: 20px; color: var(--ink-soft); line-height:1;
+    padding: 2px 4px;
+  }
+  .close-btn:hover{ color: var(--ink); }
+
+  .drawer-body{
+    flex:1;
+    overflow-y:auto;
+    padding: 20px 24px;
+  }
+  .drawer-foot{
+    padding: 14px 24px;
+    border-top: 1px solid var(--hairline);
+    display:flex;
+    justify-content:space-between;
+    gap: 10px;
+  }
+
+  .btn{
+    border: 1px solid var(--hairline-strong);
+    background: var(--card);
+    color: var(--ink);
+    font-size: calc(13px * var(--font-scale));
+    padding: 8px 14px;
+    cursor:pointer;
+    font-family: inherit;
+  }
+  .btn:hover{ border-color: var(--ink-soft); }
+  .btn.primary{
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .btn.primary:hover{ opacity:0.9; }
+  .btn.danger{ color: var(--red); border-color: var(--hairline-strong); }
+  .btn.danger:hover{ border-color: var(--red); }
+  .btn.small{ padding: 5px 10px; font-size: calc(12px * var(--font-scale)); }
+
+  label.field-label{
+    display:block;
+    font-size: calc(12.5px * var(--font-scale));
+    color: var(--ink-soft);
+    margin: 16px 0 6px;
+  }
+  select, input[type="text"], textarea, input[type="color"]{
+    font-family: inherit;
+    font-size: calc(14px * var(--font-scale));
+    color: var(--ink);
+    border: 1px solid var(--hairline-strong);
+    background: #fff;
+    padding: 7px 9px;
+    width: 100%;
+  }
+  textarea{ resize: vertical; min-height: 60px; line-height:1.5; }
+
+  table.content-table{
+    width:100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  table.content-table th, table.content-table td{
+    border: 1px solid var(--hairline);
+    padding: 7px 8px;
+    text-align:left;
+    vertical-align: top;
+  }
+  table.content-table th{
+    background: var(--paper);
+    font-weight:600;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  table.edit-table input{ border: 1px solid transparent; padding:4px 5px; width:100%; background:transparent; }
+  table.edit-table input:focus{ border-color: var(--hairline-strong); background:#fff; }
+  table.edit-table td, table.edit-table th{ padding:3px; }
+  .col-del, .row-del{
+    background:none; border:none; color: var(--ink-soft); cursor:pointer; font-size:14px;
+  }
+  .col-del:hover, .row-del:hover{ color: var(--red); }
+
+  ul.content-list{ margin:0; padding-left: 18px; font-size: 14px; line-height:1.8; }
+  .list-edit-row{ display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .list-edit-row input{ flex:1; }
+
+  .text-section{ margin-bottom: 16px; }
+  .text-section h4{ margin:0 0 4px; font-size:14px; }
+  .text-section p{ margin:0; font-size:14px; line-height:1.7; white-space:pre-wrap; color: var(--ink); }
+  .text-edit-block{ border: 1px solid var(--hairline); padding: 10px; margin-bottom:10px; }
+  .text-edit-block input.heading-input{ font-weight:600; margin-bottom:6px; }
+  .text-edit-block .remove-section{ float:right; }
+
+  .add-row-bar{ margin-top:10px; display:flex; gap:8px; }
+
+  .attach-row{
+    display:flex; align-items:center; gap:8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--hairline);
+    font-size: calc(13px * var(--font-scale));
+  }
+  .attach-row .attach-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .attach-row .attach-size{ color: var(--ink-soft); font-size: calc(12px * var(--font-scale)); }
+  .attach-list-view{ margin: 4px 0 16px; }
+  .attach-item-view{
+    border: 1px solid var(--hairline);
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .attach-item-view img{ max-width:100%; max-height:220px; display:block; margin-bottom:8px; }
+  .attach-item-view video{ max-width:100%; display:block; margin-bottom:8px; }
+  .attach-item-view .attach-file-name{ font-size: calc(13px * var(--font-scale)); color: var(--ink); }
+
+  .empty-note{ color: var(--ink-soft); font-size: 14px; line-height:1.6; }
+
+  .status-msg{
+    position:fixed; bottom: 20px; left:50%; transform: translateX(-50%);
+    background: var(--ink); color:#fff; font-size:13px;
+    padding: 8px 16px; opacity:0; pointer-events:none;
+    transition: opacity 0.2s ease;
+    z-index: 60;
+  }
+  .status-msg.show{ opacity:0.92; }
+
+  .loading{ padding: 60px 40px; color: var(--ink-soft); font-size:14px; }
+
+  .settings-panel{
+    position:fixed; top:50%; left:50%;
+    transform: translate(-50%,-46%);
+    width: 380px; max-width: 92vw;
+    background: var(--card);
+    border: 1px solid var(--hairline-strong);
+    z-index: 70;
+    opacity:0; pointer-events:none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .settings-panel.open{ opacity:1; pointer-events:auto; transform: translate(-50%,-50%); }
+  .settings-head{
+    padding: 20px 22px 12px;
+    border-bottom: 1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .settings-head h2{ margin:0; font-size: calc(18px * var(--font-scale)); font-weight:700; }
+  .settings-body{ padding: 14px 22px 4px; }
+  .settings-body input[type="color"]{ width:64px; height:36px; padding:2px; cursor:pointer; }
+  .settings-foot{
+    padding: 14px 22px;
+    border-top: 1px solid var(--hairline);
+    display:flex; justify-content:space-between; gap:10px;
+  }
+  .settings-hint{ font-size: calc(12px * var(--font-scale)); color: var(--ink-soft); margin: 4px 0 0; }
+
+  @media (max-width: 640px){
+    .topbar{ padding: 24px 20px 18px; flex-direction:column; align-items:flex-start; gap:8px; }
+    .topbar-actions{ gap:12px; }
+    .grid{ padding: 20px 16px 40px; }
+    .drawer{ width: 100vw; max-width:100vw; }
+    .settings-panel{ width: 92vw; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div>
+      <h1 id="appTitle">교무 행정 대시보드</h1>
+      <p id="appSubtitle">흩어진 학교 행정 정보를 한 화면에서 확인하고 편집합니다.</p>
+    </div>
+    <div class="topbar-actions">
+      <button class="reset-link" id="adminBtn">🔒 관리자 로그인</button>
+      <button class="reset-link" id="reorderToggleBtn" style="display:none;">⇅ 순서 편집</button>
+      <button class="reset-link" id="settingsBtn" style="display:none;">⚙ 화면 설정</button>
+      <button class="reset-link" id="resetAllBtn" style="display:none;">전체 초기값으로 되돌리기</button>
+    </div>
+  </div>
+
+  <div class="sync-hint" id="syncHint"></div>
+
+  <div id="grid" class="grid">
+    <div class="loading">불러오는 중…</div>
+  </div>
+
+  <div class="backdrop" id="adminBackdrop"></div>
+  <div class="settings-panel" id="adminPanel">
+    <div class="settings-head">
+      <h2 id="adminPanelTitle">관리자 로그인</h2>
+      <button class="close-btn" id="adminCloseBtn">✕</button>
+    </div>
+    <div class="settings-body">
+      <p class="empty-note" style="margin-top:0;">관리자 비밀번호를 입력하면 편집 권한이 열립니다. 이 비밀번호는 이 화면을 보는 모든 사람에게 동일하게 적용됩니다.</p>
+      <label class="field-label">비밀번호</label>
+      <input type="password" id="adminPasswordInput" placeholder="비밀번호 입력">
+    </div>
+    <div class="settings-foot">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="adminCancelBtn">취소</button>
+        <button class="btn primary" id="adminLoginBtn">로그인</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <div class="backdrop" id="settingsBackdrop"></div>
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-head">
+      <h2>화면 설정</h2>
+      <button class="close-btn" id="settingsCloseBtn">✕</button>
+    </div>
+    <div class="settings-body">
+      <label class="field-label" style="margin-top:0;">대시보드 제목</label>
+      <input type="text" id="setTitle" placeholder="교무 행정 대시보드">
+      <label class="field-label">부제목</label>
+      <input type="text" id="setSubtitle" placeholder="흩어진 학교 행정 정보를 한 화면에서 확인하고 편집합니다.">
+      <label class="field-label">메뉴 버튼 색상</label>
+      <input type="color" id="setAccent">
+      <label class="field-label">글씨체</label>
+      <select id="setFont">
+        <option value="system">기본 (시스템 글꼴)</option>
+        <option value="noto">고딕 (Noto Sans KR)</option>
+        <option value="nanumgothic">나눔고딕</option>
+        <option value="nanummyeongjo">나눔명조</option>
+        <option value="gowunbatang">고운바탕</option>
+        <option value="blackhan">제목용 굵은 고딕 (Black Han Sans)</option>
+      </select>
+      <label class="field-label">글씨 크기</label>
+      <select id="setFontSize">
+        <option value="0.9">작게</option>
+        <option value="1">보통</option>
+        <option value="1.15">크게</option>
+        <option value="1.3">아주 크게</option>
+      </select>
+      <p class="settings-hint">메뉴 버튼과 화면 전체 글씨에 적용됩니다.</p>
+      <label class="field-label">관리자 비밀번호 변경</label>
+      <input type="text" id="setAdminPassword" placeholder="새 비밀번호 (모두에게 공통 적용)">
+      <p class="settings-hint">이 화면을 보는 모든 사람이 이 비밀번호로 관리자 로그인을 할 수 있습니다.</p>
+    </div>
+    <div class="settings-foot">
+      <button class="btn danger" id="settingsResetBtn">기본값으로</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="settingsCancelBtn">취소</button>
+        <button class="btn primary" id="settingsSaveBtn">저장</button>
+      </div>
+    </div>
+  </div>
+  <div class="drawer" id="drawer">
+    <div class="drawer-head">
+      <div class="cat-bar" id="drawerCatBar"></div>
+      <div class="drawer-title-wrap" id="drawerTitleWrap"></div>
+      <button class="close-btn" id="closeBtn">✕</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-foot" id="drawerFoot"></div>
+  </div>
+
+  <div class="status-msg" id="statusMsg"></div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'school-dashboard-items-v1';
+
+  // ── 공유(실시간 동기화) 설정 ──────────────────────────────────────────
+  // 아래 값을 Firebase 콘솔에서 발급받은 내용으로 채우면, 이 파일을 여는
+  // 모든 사람이 같은 데이터를 실시간으로 공유하게 됩니다. apiKey를 비워두면
+  // (기본값) 지금처럼 이 브라우저에만 저장되는 개인 모드로 동작합니다.
+  const FIREBASE_CONFIG = {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
+  };
+  const FIRESTORE_COLLECTION = 'dashboard';
+  const FIRESTORE_DOC = 'state';
+  let firestoreDb = null;
+  let isAdmin = false;
+
+  function isSharedModeConfigured(){
+    return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId);
+  }
+  const TRAINING_LINK_URL = 'https://docs.google.com/spreadsheets/d/1mX_W0VLLmba3X5FAgfFpkJmmPjOdxnamUVjnSAzqs7U/edit?gid=352456726#gid=352456726';
+  const RECORD_GUIDE_LINK_URL = 'https://sites.google.com/view/hdmiddleahn/%ED%99%88';
+  const DEFAULT_COLOR = '#6B6156';
+
+  const FONT_STACKS = {
+    system: '-apple-system, BlinkMacSystemFont, "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif',
+    noto: "'Noto Sans KR', sans-serif",
+    nanumgothic: "'Nanum Gothic', sans-serif",
+    nanummyeongjo: "'Nanum Myeongjo', serif",
+    gowunbatang: "'Gowun Batang', serif",
+    blackhan: "'Black Han Sans', sans-serif"
+  };
+
+  function defaultSettings(){
+    return {
+      accent: '#1C2B4A', font: 'system', fontScale: 1,
+      title: '교무 행정 대시보드',
+      subtitle: '흩어진 학교 행정 정보를 한 화면에서 확인하고 편집합니다.',
+      adminPassword: 'admin1234'
+    };
+  }
+
+  function applySettings(s){
+    const root = document.documentElement.style;
+    root.setProperty('--accent', (s && s.accent) || '#1C2B4A');
+    root.setProperty('--app-font', FONT_STACKS[(s && s.font)] || FONT_STACKS.system);
+    root.setProperty('--font-scale', (s && s.fontScale) || 1);
+    document.getElementById('appTitle').textContent = (s && s.title) || defaultSettings().title;
+    document.getElementById('appSubtitle').textContent = (s && s.subtitle) || defaultSettings().subtitle;
+  }
+
+  // Storage: if a Firebase config is filled in above, uses Firestore so
+  // every visitor shares and sees the same live data. Otherwise prefers
+  // window.storage (Claude chat/artifact preview), then the browser's own
+  // localStorage (once downloaded and opened directly), then in-memory only.
+  let storageMode = 'memory';
+
+  async function initStorage(){
+    if(isSharedModeConfigured()){
+      try{
+        const app = firebase.initializeApp(FIREBASE_CONFIG);
+        firestoreDb = firebase.firestore();
+        storageMode = 'firestore';
+        return;
+      }catch(e){ /* fall through to local modes if init fails */ }
+    }
+    if(window.storage){ storageMode = 'window-storage'; return; }
+    try{
+      const testKey = '__school_dashboard_test__';
+      window.localStorage.setItem(testKey, '1');
+      window.localStorage.removeItem(testKey);
+      storageMode = 'local-storage';
+      return;
+    }catch(e){ /* localStorage unavailable (private mode, disabled, etc.) */ }
+    storageMode = 'memory';
+  }
+
+  async function loadState(){
+    if(storageMode === 'firestore'){
+      try{
+        const snap = await firestoreDb.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC).get();
+        if(snap.exists) return snap.data();
+      }catch(e){ /* doc not found yet or network error */ }
+      return null;
+    }
+    if(storageMode === 'window-storage'){
+      try{
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if(res && res.value) return JSON.parse(res.value);
+      }catch(e){ /* key not found or storage error */ }
+      return null;
+    }
+    if(storageMode === 'local-storage'){
+      try{
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if(raw) return JSON.parse(raw);
+      }catch(e){ /* corrupt or inaccessible */ }
+      return null;
+    }
+    return null;
+  }
+
+  async function saveState(state){
+    if(storageMode === 'firestore'){
+      try{
+        await firestoreDb.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC).set(state);
+        return true;
+      }catch(e){ return false; }
+    }
+    if(storageMode === 'window-storage'){
+      try{
+        const res = await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+        return !!res;
+      }catch(e){ return false; }
+    }
+    if(storageMode === 'local-storage'){
+      try{
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
+      }catch(e){ return false; }
+    }
+    return false; // memory-only: nothing persists across reloads
+  }
+
+  // Keeps every open browser in sync: whenever the shared document changes
+  // (an admin saves an edit, anywhere), refresh this view automatically.
+  function subscribeRealtime(){
+    if(storageMode !== 'firestore') return;
+    firestoreDb.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC)
+      .onSnapshot((snap) => {
+        if(!snap.exists) return;
+        const data = snap.data();
+        if(data && data.items){
+          items = data.items;
+          migrateFixedShortcuts();
+        }
+        settings = Object.assign(defaultSettings(), (data && data.settings) || {});
+        applySettings(settings);
+        if(!currentId) renderGrid(); // avoid yanking the grid out from under an open drawer
+      }, () => { /* permission or network error; keep last known local state */ });
+  }
+
+  function defaultItems(){
+    return [
+      {
+        id: 'training', empty:false, color:'#B4442E',
+        title: '법정 의무연수 이수 현황', type:'text',
+        sections: [{heading:'', body:'클릭하면 법정 의무연수 이수 현황 시트로 이동합니다.'}],
+        linkUrl: TRAINING_LINK_URL
+      },
+      {
+        id: 'contacts', empty:false, color:'#1C2B4A',
+        title: '학교 연락처', type:'table',
+        headers: ['부서','담당자','전화번호'],
+        rows: [
+          ['교무실','',''],
+          ['행정실','',''],
+          ['보건실','',''],
+          ['상담실','','']
+        ]
+      },
+      {
+        id: 'record-guide', empty:false, color:'#8A6D3B',
+        title: '생활기록부 안내', type:'text',
+        sections: [{heading:'', body:'클릭하면 생활기록부 관련 안내 사이트로 이동합니다.'}],
+        linkUrl: RECORD_GUIDE_LINK_URL
+      },
+      {
+        id: 'volunteer-list', empty:false, color:'#3F6B52',
+        title: '봉사활동 도우미 명단', type:'table',
+        headers: ['이름','연락처','담당 업무'],
+        rows: [['','',''],['','','']]
+      },
+      {
+        id: 'teachercall', empty:false, color:'#6B5B95',
+        title: '교원안심번호 티처콜', type:'text',
+        sections: [
+          {heading:'번호', body:'국번 없이 1588-0768 (학교 실정에 맞게 수정하세요)'},
+          {heading:'이용 안내', body:'악성 민원 등으로부터 교원을 보호하기 위한 안심번호 서비스입니다.'}
+        ]
+      }
+    ].concat(Array.from({length:10}, (_,i)=>({
+      id: 'slot-' + (i+1), empty:true, color:DEFAULT_COLOR, title:'', type:'table',
+      headers:['항목','내용'], rows:[['','']]
+    })));
+  }
+
+  let items = [];
+  let settings = defaultSettings();
+  let currentId = null;
+  let editing = false;
+  let draft = null;
+  let reorderMode = false;
+
+  function esc(s){
+    return (s===undefined||s===null?'':String(s)).replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+  }
+
+  function getColor(item){
+    return item.color || DEFAULT_COLOR;
+  }
+
+  function showStatus(msg){
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(showStatus._t);
+    showStatus._t = setTimeout(()=> el.classList.remove('show'), 1600);
+  }
+
+  async function loadItems(){
+    await initStorage();
+    const state = await loadState();
+    if(state && state.items){
+      items = state.items;
+      migrateFixedShortcuts();
+    } else {
+      items = defaultItems();
+    }
+    settings = Object.assign(defaultSettings(), (state && state.settings) || {});
+    applySettings(settings);
+    if(storageMode === 'firestore' && !state){
+      await saveState({items, settings}); // first run: create the shared document
+    }
+    updateSyncHint();
+  }
+
+  function updateSyncHint(){
+    const el = document.getElementById('syncHint');
+    if(!el) return;
+    if(storageMode === 'firestore'){
+      el.textContent = '🟢 실시간 공유 모드: 관리자가 수정하면 이 화면을 보는 모든 사람에게 바로 반영됩니다.';
+    } else {
+      el.textContent = '🔒 개인 모드: 지금 이 수정 내용은 이 브라우저에만 저장됩니다. 모두에게 공유하려면 실시간 공유 설정이 필요합니다.';
+    }
+  }
+
+  function migrateFixedShortcuts(){
+    const fixes = [
+      {id:'training', url: TRAINING_LINK_URL, color:'#B4442E', note:'클릭하면 법정 의무연수 이수 현황 시트로 이동합니다.'},
+      {id:'record-guide', url: RECORD_GUIDE_LINK_URL, color:'#8A6D3B', note:'클릭하면 생활기록부 관련 안내 사이트로 이동합니다.'}
+    ];
+    fixes.forEach(f => {
+      const t = items.find(i => i.id === f.id);
+      if(!t) return;
+      if(!t.linkUrl) t.linkUrl = f.url;
+      if(t.type === 'link' || !t.type){
+        t.type = 'text';
+        t.sections = (t.sections && t.sections.length) ? t.sections : [{heading:'', body:f.note}];
+      }
+      if(!t.color) t.color = f.color;
+      delete t.category;
+      delete t.url;
+    });
+    items.forEach(i => { if(!i.color) i.color = DEFAULT_COLOR; delete i.category; });
+  }
+
+  async function saveItems(){
+    const ok = await saveState({items, settings});
+    if(!ok){
+      if(storageMode === 'memory'){
+        showStatus('이 브라우저에서는 저장이 지원되지 않아 새로고침하면 내용이 사라집니다.');
+      } else {
+        showStatus('저장에 실패했습니다. 다시 시도해 주세요.');
+      }
+    }
+    return ok;
+  }
+
+  function previewText(item){
+    if(item.empty) return '';
+    const attachSuffix = (item.attachments && item.attachments.length) ? ' · 첨부 ' + item.attachments.length + '개' : '';
+    if(item.linkUrl && item.linkUrl.trim()){
+      try{ return '바로가기 · ' + (new URL(item.linkUrl).hostname) + attachSuffix; }
+      catch(e){ return '바로가기 링크' + attachSuffix; }
+    }
+    if(item.type === 'table'){
+      return '표 · ' + item.headers.length + '개 항목 · ' + item.rows.length + '행' + attachSuffix;
+    }
+    if(item.type === 'list'){
+      return '목록 · ' + item.items.length + '개 항목' + attachSuffix;
+    }
+    if(item.type === 'text'){
+      if(!item.sections.length) return '내용 없음' + attachSuffix;
+      return item.sections[0].heading + (item.sections.length > 1 ? ' 외 ' + (item.sections.length-1) + '건' : '') + attachSuffix;
+    }
+    return attachSuffix.replace(/^ · /, '');
+  }
+
+  function renderGrid(){
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    items.forEach((item, idx) => {
+      if(item.empty && !isAdmin) return; // 관리자가 아니면 빈 자리는 보여주지 않음
+      const card = document.createElement('div');
+      card.tabIndex = 0;
+      card.style.animationDelay = (idx * 25) + 'ms';
+      if(item.empty){
+        card.className = 'card empty';
+        card.innerHTML = '+ 새 항목 추가';
+      } else {
+        card.className = 'card';
+        card.style.borderLeftColor = getColor(item);
+        card.innerHTML =
+          '<div>' +
+            '<h3>' + esc(item.title) + '</h3>' +
+            (item.manager && item.manager.trim() ? '<div class="manager">' + esc(item.manager) + '</div>' : '') +
+          '</div>' +
+          '<div class="preview">' + esc(previewText(item)) + '</div>';
+      }
+      if(!item.empty && isAdmin){
+        const pin = document.createElement('button');
+        pin.className = 'edit-pin';
+        pin.type = 'button';
+        pin.title = '편집';
+        pin.textContent = '✎';
+        pin.draggable = false;
+        pin.addEventListener('mousedown', (e) => e.stopPropagation());
+        pin.addEventListener('click', (e) => { e.stopPropagation(); openDrawer(item.id, true); });
+        card.appendChild(pin);
+      }
+      if(reorderMode && isAdmin){
+        card.classList.add('reorder-mode');
+        card.draggable = true;
+
+        const handle = document.createElement('div');
+        handle.className = 'drag-handle';
+        handle.textContent = '⠿';
+        card.appendChild(handle);
+
+        card.addEventListener('dragstart', (e) => {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          grid.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
+        });
+        card.addEventListener('dragenter', (e) => {
+          e.preventDefault();
+          if(card.classList.contains('dragging')) return;
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('dragover', (e) => e.preventDefault());
+        card.addEventListener('drop', (e) => {
+          e.preventDefault();
+          card.classList.remove('drag-over');
+          const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+          if(isNaN(from) || from === idx) return;
+          const moved = items.splice(from, 1)[0];
+          items.splice(idx, 0, moved);
+          saveItems();
+          renderGrid();
+        });
+      }
+      card.addEventListener('click', () => {
+        if(reorderMode) return;
+        if(item.empty && !isAdmin) return;
+        if(!item.empty && item.linkUrl && item.linkUrl.trim()){
+          window.open(item.linkUrl, '_blank', 'noopener');
+        } else {
+          openDrawer(item.id);
+        }
+      });
+      card.addEventListener('keydown', (e) => {
+        if(reorderMode) return;
+        if(e.key !== 'Enter') return;
+        if(item.empty && !isAdmin) return;
+        if(!item.empty && item.linkUrl && item.linkUrl.trim()) window.open(item.linkUrl, '_blank', 'noopener');
+        else openDrawer(item.id);
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function openDrawer(id, forceEdit){
+    currentId = id;
+    editing = false;
+    draft = null;
+    document.getElementById('backdrop').classList.add('open');
+    document.getElementById('drawer').classList.add('open');
+    const item = items.find(i => i.id === id);
+    if(item.empty || forceEdit){
+      editing = true;
+      draft = JSON.parse(JSON.stringify(item));
+    }
+    renderDrawer();
+  }
+
+  function closeDrawer(){
+    document.getElementById('backdrop').classList.remove('open');
+    document.getElementById('drawer').classList.remove('open');
+    currentId = null; editing = false; draft = null;
+    renderGrid(); // 닫히는 사이 실시간으로 반영된 변경사항이 있으면 그리드에 반영
+  }
+
+  function renderDrawer(){
+    const item = items.find(i => i.id === currentId);
+    if(!item) return;
+    const source = editing ? draft : item;
+    document.getElementById('drawerCatBar').style.background = getColor(source);
+
+    const titleWrap = document.getElementById('drawerTitleWrap');
+    if(editing){
+      titleWrap.innerHTML =
+        '<label class="field-label" style="margin-top:0;">항목 이름</label>' +
+        '<input type="text" class="title-input" id="editTitle" value="' + esc(source.title) + '" placeholder="항목 이름을 입력하세요">';
+    } else {
+      titleWrap.innerHTML = '<h2>' + esc(source.title) + '</h2>';
+    }
+
+    document.getElementById('drawerBody').innerHTML = '';
+    renderBody(item, source);
+    renderFoot(item);
+
+    if(editing){
+      document.getElementById('editTitle').addEventListener('input', (e) => {
+        draft.title = e.target.value;
+      });
+    }
+  }
+
+  function renderBody(item, source){
+    const body = document.getElementById('drawerBody');
+
+    if(editing){
+      const catRow = document.createElement('div');
+      catRow.innerHTML =
+        '<label class="field-label" style="margin-top:0;">색상</label>' +
+        '<input type="color" id="editColor" value="' + (source.color || DEFAULT_COLOR) + '">' +
+        '<label class="field-label">담당자</label>' +
+        '<input type="text" id="editManager" value="' + esc(source.manager || '') + '" placeholder="이름을 입력하세요">' +
+        '<label class="field-label">바로가기 링크 (선택)</label>' +
+        '<input type="text" id="editLinkUrl" value="' + esc(source.linkUrl || '') + '" placeholder="https://... (입력하면 클릭 시 새 탭에서 바로 이동합니다)">' +
+        '<label class="field-label">첨부파일 (문서·사진 등)</label>' +
+        '<input type="file" id="editAttachInput" multiple>' +
+        '<p class="empty-note" style="margin-top:6px;">한 파일당 4MB까지 첨부할 수 있습니다. 동영상처럼 용량이 큰 파일은 구글 드라이브 등에 올린 뒤 위의 바로가기 링크로 연결하는 것을 권장합니다.</p>';
+      body.appendChild(catRow);
+
+      document.getElementById('editColor').addEventListener('input', (e) => { draft.color = e.target.value; });
+      document.getElementById('editManager').addEventListener('input', (e) => { draft.manager = e.target.value; });
+      document.getElementById('editLinkUrl').addEventListener('input', (e) => { draft.linkUrl = e.target.value; });
+      document.getElementById('editAttachInput').addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        if(!draft.attachments) draft.attachments = [];
+        for(const file of files){
+          if(file.size > MAX_ATTACHMENT_BYTES){
+            showStatus(file.name + ': 4MB보다 커서 첨부할 수 없습니다. 바로가기 링크를 이용해 주세요.');
+            continue;
+          }
+          try{
+            const dataUrl = await readFileAsDataURL(file);
+            draft.attachments.push({
+              id: 'att-' + Date.now() + '-' + Math.random().toString(36).slice(2,8),
+              name: file.name,
+              type: file.type || '',
+              size: file.size,
+              dataUrl: dataUrl
+            });
+          }catch(err){
+            showStatus(file.name + ': 파일을 읽는 중 문제가 발생했습니다.');
+          }
+        }
+        e.target.value = '';
+        renderDrawer();
+      });
+
+      const attachListWrap = document.createElement('div');
+      attachListWrap.style.marginTop = '4px';
+      body.appendChild(attachListWrap);
+      renderAttachmentEditList(attachListWrap, draft);
+
+      const contentWrap = document.createElement('div');
+      contentWrap.style.marginTop = '18px';
+      body.appendChild(contentWrap);
+      if(draft.type === 'table') renderTableEdit(contentWrap, draft);
+      if(draft.type === 'list') renderListEdit(contentWrap, draft);
+      if(draft.type === 'text') renderTextEdit(contentWrap, draft);
+      return;
+    }
+
+    // view mode
+    if(item.manager && item.manager.trim()){
+      const m = document.createElement('p');
+      m.style.cssText = 'font-size:15px;font-weight:700;color:var(--ink);margin:2px 0 14px;';
+      m.textContent = item.manager;
+      body.appendChild(m);
+    }
+    if(item.linkUrl && item.linkUrl.trim()){
+      renderShortcutBanner(body, item);
+    }
+    if(item.attachments && item.attachments.length){
+      renderAttachmentView(body, item);
+    }
+    if(item.empty){
+      const p = document.createElement('p');
+      p.className = 'empty-note';
+      p.textContent = '아직 내용이 없습니다. 편집을 눌러 이 자리에 원하는 항목을 추가하세요.';
+      body.appendChild(p);
+      return;
+    }
+    if(item.type === 'table') renderTableView(body, item);
+    if(item.type === 'list') renderListView(body, item);
+    if(item.type === 'text') renderTextView(body, item);
+  }
+
+  const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+  function readFileAsDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function formatBytes(n){
+    if(n < 1024) return n + ' B';
+    if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+    return (n/1024/1024).toFixed(1) + ' MB';
+  }
+
+  function attachIcon(type){
+    if(!type) return '📎';
+    if(type.indexOf('image/') === 0) return '🖼️';
+    if(type.indexOf('video/') === 0) return '🎬';
+    if(type === 'application/pdf') return '📄';
+    return '📎';
+  }
+
+  function renderAttachmentEditList(wrap, d){
+    const list = d.attachments || [];
+    if(!list.length){ wrap.innerHTML = ''; return; }
+    wrap.innerHTML = list.map((a, i) =>
+      '<div class="attach-row">' +
+        '<span>' + attachIcon(a.type) + '</span>' +
+        '<span class="attach-name">' + esc(a.name) + '</span>' +
+        '<span class="attach-size">' + formatBytes(a.size) + '</span>' +
+        '<button type="button" class="row-del attach-del" data-idx="' + i + '" title="삭제">✕</button>' +
+      '</div>'
+    ).join('');
+    wrap.querySelectorAll('.attach-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        d.attachments.splice(+btn.dataset.idx, 1);
+        renderDrawer();
+      });
+    });
+  }
+
+  function renderAttachmentView(body, item){
+    const wrap = document.createElement('div');
+    wrap.className = 'attach-list-view';
+    wrap.innerHTML = item.attachments.map(a => {
+      if(a.type && a.type.indexOf('image/') === 0){
+        return '<div class="attach-item-view">' +
+          '<img src="' + a.dataUrl + '" alt="' + esc(a.name) + '">' +
+          '<div class="attach-file-name">' + esc(a.name) + ' · ' + formatBytes(a.size) + '</div>' +
+        '</div>';
+      }
+      if(a.type && a.type.indexOf('video/') === 0){
+        return '<div class="attach-item-view">' +
+          '<video src="' + a.dataUrl + '" controls></video>' +
+          '<div class="attach-file-name">' + esc(a.name) + ' · ' + formatBytes(a.size) + '</div>' +
+        '</div>';
+      }
+      return '<div class="attach-item-view">' +
+        '<a class="btn small" href="' + a.dataUrl + '" download="' + esc(a.name) + '">' + attachIcon(a.type) + ' ' + esc(a.name) + ' 다운로드</a>' +
+        '<div class="attach-file-name" style="margin-top:6px;">' + formatBytes(a.size) + '</div>' +
+      '</div>';
+    }).join('');
+    body.appendChild(wrap);
+  }
+
+  function renderShortcutBanner(body, item){
+    const wrap = document.createElement('div');
+    wrap.style.marginBottom = '16px';
+    wrap.innerHTML =
+      '<p style="word-break:break-all; font-size:12.5px; color:var(--ink-soft); margin:0 0 8px;">바로가기: ' + esc(item.linkUrl) + '</p>' +
+      '<button class="btn small" id="openLinkBtn">새 탭에서 열기</button>';
+    body.appendChild(wrap);
+    document.getElementById('openLinkBtn').addEventListener('click', () => window.open(item.linkUrl, '_blank', 'noopener'));
+  }
+
+  function renderTableView(body, item){
+    const table = document.createElement('table');
+    table.className = 'content-table';
+    table.innerHTML =
+      '<thead><tr>' + item.headers.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>' +
+      '<tbody>' + item.rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+    body.appendChild(table);
+  }
+
+  function renderListView(body, item){
+    const ul = document.createElement('ul');
+    ul.className = 'content-list';
+    ul.innerHTML = item.items.map(t => '<li>' + esc(t) + '</li>').join('');
+    body.appendChild(ul);
+  }
+
+  function renderTextView(body, item){
+    item.sections.forEach(sec => {
+      const div = document.createElement('div');
+      div.className = 'text-section';
+      div.innerHTML = (sec.heading ? '<h4>' + esc(sec.heading) + '</h4>' : '') + '<p>' + esc(sec.body) + '</p>';
+      body.appendChild(div);
+    });
+  }
+
+  function renderTableEdit(wrap, d){
+    const table = document.createElement('table');
+    table.className = 'content-table edit-table';
+    const theadRow = '<tr>' + d.headers.map((h, ci) =>
+      '<th><input type="text" data-col="' + ci + '" class="head-input" value="' + esc(h) + '"></th>'
+    ).join('') + '<th></th></tr>';
+    const bodyRows = d.rows.map((row, ri) =>
+      '<tr>' + row.map((c, ci) =>
+        '<td><input type="text" data-row="' + ri + '" data-col="' + ci + '" class="cell-input" value="' + esc(c) + '"></td>'
+      ).join('') + '<td><button class="row-del" data-row="' + ri + '" title="행 삭제">✕</button></td></tr>'
+    ).join('');
+    table.innerHTML = '<thead>' + theadRow + '</thead><tbody>' + bodyRows + '</tbody>';
+    wrap.appendChild(table);
+
+    const bar = document.createElement('div');
+    bar.className = 'add-row-bar';
+    bar.innerHTML =
+      '<button class="btn small" id="addRowBtn">행 추가</button>' +
+      '<button class="btn small" id="addColBtn">열 추가</button>';
+    wrap.appendChild(bar);
+
+    table.querySelectorAll('.head-input').forEach(inp => {
+      inp.addEventListener('input', e => { d.headers[+e.target.dataset.col] = e.target.value; });
+    });
+    table.querySelectorAll('.cell-input').forEach(inp => {
+      inp.addEventListener('input', e => {
+        d.rows[+e.target.dataset.row][+e.target.dataset.col] = e.target.value;
+      });
+    });
+    table.querySelectorAll('.row-del').forEach(btn => {
+      btn.addEventListener('click', e => {
+        d.rows.splice(+e.target.dataset.row, 1);
+        renderDrawer();
+      });
+    });
+    document.getElementById('addRowBtn').addEventListener('click', () => {
+      d.rows.push(d.headers.map(()=>''));
+      renderDrawer();
+    });
+    document.getElementById('addColBtn').addEventListener('click', () => {
+      d.headers.push('새 항목');
+      d.rows.forEach(r => r.push(''));
+      renderDrawer();
+    });
+  }
+
+  function renderListEdit(wrap, d){
+    d.items.forEach((val, i) => {
+      const row = document.createElement('div');
+      row.className = 'list-edit-row';
+      row.innerHTML =
+        '<input type="text" value="' + esc(val) + '" data-idx="' + i + '">' +
+        '<button class="row-del" data-idx="' + i + '" title="삭제">✕</button>';
+      wrap.appendChild(row);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn small';
+    addBtn.textContent = '항목 추가';
+    wrap.appendChild(addBtn);
+
+    wrap.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', e => { d.items[+e.target.dataset.idx] = e.target.value; });
+    });
+    wrap.querySelectorAll('.row-del').forEach(btn => {
+      btn.addEventListener('click', e => { d.items.splice(+e.target.dataset.idx, 1); renderDrawer(); });
+    });
+    addBtn.addEventListener('click', () => { d.items.push(''); renderDrawer(); });
+  }
+
+  function renderTextEdit(wrap, d){
+    d.sections.forEach((sec, i) => {
+      const block = document.createElement('div');
+      block.className = 'text-edit-block';
+      block.innerHTML =
+        '<button class="row-del remove-section" data-idx="' + i + '" title="이 항목 삭제">✕</button>' +
+        '<input type="text" class="heading-input" data-idx="' + i + '" placeholder="소제목" value="' + esc(sec.heading) + '">' +
+        '<textarea data-idx="' + i + '" placeholder="내용을 입력하세요">' + esc(sec.body) + '</textarea>';
+      wrap.appendChild(block);
+    });
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn small';
+    addBtn.textContent = '항목 추가';
+    wrap.appendChild(addBtn);
+
+    wrap.querySelectorAll('.heading-input').forEach(inp => {
+      inp.addEventListener('input', e => { d.sections[+e.target.dataset.idx].heading = e.target.value; });
+    });
+    wrap.querySelectorAll('textarea').forEach(ta => {
+      ta.addEventListener('input', e => { d.sections[+e.target.dataset.idx].body = e.target.value; });
+    });
+    wrap.querySelectorAll('.remove-section').forEach(btn => {
+      btn.addEventListener('click', e => { d.sections.splice(+e.target.dataset.idx, 1); renderDrawer(); });
+    });
+    addBtn.addEventListener('click', () => { d.sections.push({heading:'', body:''}); renderDrawer(); });
+  }
+
+  function renderFoot(item){
+    const foot = document.getElementById('drawerFoot');
+    if(editing){
+      foot.innerHTML =
+        '<button class="btn danger" id="clearBtn">비우기</button>' +
+        '<div style="display:flex; gap:8px;">' +
+          '<button class="btn" id="cancelBtn">취소</button>' +
+          '<button class="btn primary" id="saveBtn">저장</button>' +
+        '</div>';
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        if(!draft.title || !draft.title.trim()){
+          showStatus('항목 이름을 입력해 주세요.');
+          return;
+        }
+        draft.empty = false;
+        const idx = items.findIndex(i => i.id === currentId);
+        items[idx] = draft;
+        const ok = await saveItems();
+        editing = false; draft = null;
+        renderGrid();
+        renderDrawer();
+        if(ok) showStatus('저장되었습니다.');
+      });
+      document.getElementById('cancelBtn').addEventListener('click', () => {
+        const orig = items.find(i => i.id === currentId);
+        if(orig.empty){ closeDrawer(); return; }
+        editing = false; draft = null;
+        renderDrawer();
+      });
+      document.getElementById('clearBtn').addEventListener('click', async () => {
+        if(!confirm('이 항목을 빈 자리로 되돌릴까요? 입력한 내용이 모두 사라집니다.')) return;
+        const idx = items.findIndex(i => i.id === currentId);
+        items[idx] = {id: currentId, empty:true, color:DEFAULT_COLOR, title:'', type:'table', headers:['항목','내용'], rows:[['','']]};
+        await saveItems();
+        renderGrid();
+        closeDrawer();
+        showStatus('항목을 비웠습니다.');
+      });
+    } else {
+      foot.innerHTML = isAdmin ? '<div></div><button class="btn primary" id="editBtn">편집</button>' : '';
+      const editBtn = document.getElementById('editBtn');
+      if(editBtn){
+        editBtn.addEventListener('click', () => {
+          editing = true;
+          draft = JSON.parse(JSON.stringify(item));
+          renderDrawer();
+        });
+      }
+    }
+  }
+
+  document.getElementById('closeBtn').addEventListener('click', closeDrawer);
+  document.getElementById('backdrop').addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') closeDrawer(); });
+
+  function applyAdminUI(){
+    const adminBtn = document.getElementById('adminBtn');
+    adminBtn.textContent = isAdmin ? '🔓 관리자 모드 종료' : '🔒 관리자 로그인';
+    document.getElementById('reorderToggleBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('settingsBtn').style.display = isAdmin ? '' : 'none';
+    document.getElementById('resetAllBtn').style.display = isAdmin ? '' : 'none';
+    if(!isAdmin){
+      reorderMode = false;
+      const rBtn = document.getElementById('reorderToggleBtn');
+      rBtn.classList.remove('active');
+      rBtn.textContent = '⇅ 순서 편집';
+    }
+  }
+
+  function openAdminPanel(){
+    document.getElementById('adminPasswordInput').value = '';
+    document.getElementById('adminBackdrop').classList.add('open');
+    document.getElementById('adminPanel').classList.add('open');
+    document.getElementById('adminPasswordInput').focus();
+  }
+  function closeAdminPanel(){
+    document.getElementById('adminBackdrop').classList.remove('open');
+    document.getElementById('adminPanel').classList.remove('open');
+  }
+  document.getElementById('adminBtn').addEventListener('click', () => {
+    if(isAdmin){
+      isAdmin = false;
+      sessionStorage.removeItem('dashboardIsAdmin');
+      applyAdminUI();
+      renderGrid();
+      showStatus('관리자 모드를 종료했습니다.');
+    } else {
+      openAdminPanel();
+    }
+  });
+  document.getElementById('adminCloseBtn').addEventListener('click', closeAdminPanel);
+  document.getElementById('adminCancelBtn').addEventListener('click', closeAdminPanel);
+  document.getElementById('adminBackdrop').addEventListener('click', closeAdminPanel);
+  document.getElementById('adminPasswordInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter') document.getElementById('adminLoginBtn').click();
+  });
+  document.getElementById('adminLoginBtn').addEventListener('click', () => {
+    const entered = document.getElementById('adminPasswordInput').value;
+    if(entered && entered === (settings.adminPassword || defaultSettings().adminPassword)){
+      isAdmin = true;
+      sessionStorage.setItem('dashboardIsAdmin', '1');
+      closeAdminPanel();
+      applyAdminUI();
+      renderGrid();
+      showStatus('관리자 모드로 전환되었습니다.');
+    } else {
+      showStatus('비밀번호가 올바르지 않습니다.');
+    }
+  });
+
+  document.getElementById('resetAllBtn').addEventListener('click', async () => {
+    if(!confirm('모든 항목을 초기 상태로 되돌릴까요? 지금까지 입력한 모든 내용이 사라집니다.')) return;
+    items = defaultItems();
+    await saveItems();
+    renderGrid();
+    showStatus('초기 상태로 되돌렸습니다.');
+  });
+
+  const reorderToggleBtn = document.getElementById('reorderToggleBtn');
+  reorderToggleBtn.addEventListener('click', () => {
+    reorderMode = !reorderMode;
+    reorderToggleBtn.classList.toggle('active', reorderMode);
+    reorderToggleBtn.textContent = reorderMode ? '✓ 순서 편집 완료' : '⇅ 순서 편집';
+    renderGrid();
+  });
+
+  function openSettingsPanel(){
+    document.getElementById('setTitle').value = settings.title || '';
+    document.getElementById('setSubtitle').value = settings.subtitle || '';
+    document.getElementById('setAccent').value = settings.accent;
+    document.getElementById('setFont').value = settings.font;
+    document.getElementById('setFontSize').value = String(settings.fontScale);
+    document.getElementById('setAdminPassword').value = '';
+    document.getElementById('settingsBackdrop').classList.add('open');
+    document.getElementById('settingsPanel').classList.add('open');
+  }
+  function closeSettingsPanel(){
+    document.getElementById('settingsBackdrop').classList.remove('open');
+    document.getElementById('settingsPanel').classList.remove('open');
+  }
+  document.getElementById('settingsBtn').addEventListener('click', openSettingsPanel);
+  document.getElementById('settingsCloseBtn').addEventListener('click', closeSettingsPanel);
+  document.getElementById('settingsCancelBtn').addEventListener('click', closeSettingsPanel);
+  document.getElementById('settingsBackdrop').addEventListener('click', closeSettingsPanel);
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeSettingsPanel(); });
+
+  document.getElementById('settingsSaveBtn').addEventListener('click', async () => {
+    const titleVal = document.getElementById('setTitle').value.trim();
+    const subtitleVal = document.getElementById('setSubtitle').value.trim();
+    const newPassword = document.getElementById('setAdminPassword').value.trim();
+    settings.title = titleVal || defaultSettings().title;
+    settings.subtitle = subtitleVal || defaultSettings().subtitle;
+    settings.accent = document.getElementById('setAccent').value;
+    settings.font = document.getElementById('setFont').value;
+    settings.fontScale = parseFloat(document.getElementById('setFontSize').value) || 1;
+    if(newPassword) settings.adminPassword = newPassword;
+    applySettings(settings);
+    const ok = await saveItems();
+    closeSettingsPanel();
+    if(ok) showStatus('화면 설정이 저장되었습니다.');
+  });
+  document.getElementById('settingsResetBtn').addEventListener('click', async () => {
+    const keepPassword = settings.adminPassword;
+    settings = defaultSettings();
+    settings.adminPassword = keepPassword; // 비밀번호는 화면 설정 초기화로 되돌리지 않음
+    applySettings(settings);
+    document.getElementById('setTitle').value = settings.title;
+    document.getElementById('setSubtitle').value = settings.subtitle;
+    document.getElementById('setAccent').value = settings.accent;
+    document.getElementById('setFont').value = settings.font;
+    document.getElementById('setFontSize').value = String(settings.fontScale);
+    document.getElementById('setAdminPassword').value = '';
+    await saveItems();
+    showStatus('화면 설정을 기본값으로 되돌렸습니다.');
+  });
+
+  (async function init(){
+    if(sessionStorage.getItem('dashboardIsAdmin') === '1') isAdmin = true;
+    await loadItems();
+    applyAdminUI();
+    renderGrid();
+    subscribeRealtime();
+  })();
+})();
+</script>
+</body>
+</html>
